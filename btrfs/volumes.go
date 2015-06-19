@@ -103,9 +103,9 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	//		devid    1 size 40.00GiB used 16.01GiB path /dev/sdc1
 	//		devid    2 size 40.00GiB used 16.01GiB path /dev/sdd1
 	var version, line, label, uuid string
-	line = lines[0]
+	line = strings.TrimSpace(lines[0])
 	if !strings.HasPrefix("Label:", line) {
-		return nil, fmt.Errorf("unexpected output, expected label: %v", line)
+		return nil, fmt.Errorf("unexpected output, expected Label: %v", line)
 	}else {
 		split := strings.Split(line, " ")
 		if len(split) != 4 {
@@ -116,7 +116,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	}
 
 	//get last line for version
-	line = lines[len(lines)-1]
+	line = strings.TrimSpace(lines[len(lines)-1])
 	if !strings.HasPrefix("Btrfs:", line) {
 		return nil, fmt.Errorf("unexpected output, expected btrfs version: %v", line)
 	}else {
@@ -130,7 +130,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 
 	var totalDevices, usedBytes uint64
 	var err error
-	line = lines[1]
+	line = strings.TrimSpace(lines[1])
 	if !strings.HasPrefix("Total devices", line) {
 		return nil, fmt.Errorf("unexpected output: %v", line)
 	}else {
