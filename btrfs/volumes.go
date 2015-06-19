@@ -35,6 +35,32 @@ func GetFileSystem(path string) (*FileSystem, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("path cannot be empty")
 	}
+
+	fs, err := readFileSystem(path)
+	if err != nil {
+		return nil, err
+	}
+
+	//btrfs fi df <path>, parse info into structs
+	cmd := exec.Command("btrfs", "fi", "df", path)
+	dfOut, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(string(dfOut[:]))
+
+	//also btrfs subvolume list
+	cmd = exec.Command("btrfs", "subvolume", "list", path)
+	svListOut, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(string(svListOut[:]))
+
+	return fs, nil
+}
+
+func readFileSystem(path string) (*FileSystem, error) {
 	//do a btrfs fi show <path>
 	cmd := exec.Command("btrfs", "fi", "show", path)
 	stdout, err := cmd.StdoutPipe()
@@ -60,25 +86,16 @@ func GetFileSystem(path string) (*FileSystem, error) {
 		return nil, fmt.Errorf("Error reading btrfs fi show: %v", errLines)
 	}
 
-	fmt.Println("show: ", showLines)
+	return parseFSShow(showLines)
+}
 
-	//btrfs fi df <path>, parse info into structs
-	cmd = exec.Command("btrfs", "fi", "df", path)
-	dfOut, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
+func parseFSShow(lines []string) (*FileSystem, error) {
+	fmt.Println("fs show output:")
+	for _, line := range lines {
+		fmt.Println(line)
 	}
-	fmt.Println(string(dfOut[:]))
-
-	//also btrfs subvolume list
-	cmd = exec.Command("btrfs", "subvolume", "list", path)
-	svListOut, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-	fmt.Println(string(svListOut[:]))
-
 	fs := FileSystem{subvolumes: []Subvolume{}, dfData: []DFData{}, devices: []Device{}}
+
 	return &fs, nil
 }
 
