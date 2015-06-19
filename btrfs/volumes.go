@@ -117,7 +117,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 
 	//get last line for version
 	line = strings.TrimSpace(lines[len(lines)-1])
-	if !strings.HasPrefix(line, "Btrfs:") {
+	if !strings.HasPrefix(line, "Btrfs") {
 		return nil, fmt.Errorf("unexpected output, expected btrfs version: %v", line)
 	}else {
 		split := strings.Fields(line)
