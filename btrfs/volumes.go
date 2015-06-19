@@ -180,7 +180,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 		Version:      version,
 		subvolumes:   []Subvolume{},
 		dfData:       []DFData{},
-		devices:      []Device{}}
+		devices:      devices}
 
 	return &fs, nil
 }
