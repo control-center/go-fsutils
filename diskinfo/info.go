@@ -1,0 +1,217 @@
+package diskinfo
+import (
+	"syscall"
+	"os"
+)
+
+
+type  DiskInfo struct {
+	syscall.Statfs_t
+	/*
+			Type    int64
+	        Bsize   int64
+	        Blocks  uint64
+	        Bfree   uint64
+	        Bavail  uint64
+	        Files   uint64
+	        Ffree   uint64
+	        Fsid    Fsid
+	        Namelen int64
+	        Frsize  int64
+	        Flags   int64
+	        Spare   [4]int64
+	*/
+}
+
+type FSType int64;
+
+func NewDiskInfo(volumePath string) (*DiskInfo, error) {
+
+	if err := os.Chdir(volumePath); err != nil {
+		return nil, err
+	}
+
+	var stat syscall.Statfs_t
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	if err = syscall.Statfs(wd, &stat); err != nil {
+		return nil, err
+	}
+
+	return &DiskInfo{stat}, nil
+}
+
+// free space in bytes
+func (di *DiskInfo) Free() (uint64) {
+	return di.Bfree * uint64(di.Bsize)
+}
+
+// free size in bytes
+func (di *DiskInfo) Size() (uint64) {
+	return di.Blocks * uint64(di.Bsize)
+}
+
+// used space in bytes
+func (di *DiskInfo) Used() (uint64) {
+	return di.Size() - di.Free()
+}
+
+//  percent of disk used
+func (di *DiskInfo) Usage() (float64) {
+	return float64(di.Used()) / float64(di.Size())
+}
+
+// Filesystem type
+func (di *DiskInfo) FSType() (FSType) {
+	return FSType(di.Type)
+}
+
+func (ft FSType)String()string{
+	return fsLookup[int64(ft)]
+}
+
+const (
+	ADFS_SUPER_MAGIC = 0xadf5
+	AFFS_SUPER_MAGIC = 0xADFF
+	BDEVFS_MAGIC = 0x62646576
+	BEFS_SUPER_MAGIC = 0x42465331
+	BFS_MAGIC = 0x1BADFACE
+	BINFMTFS_MAGIC = 0x42494e4d
+	BTRFS_SUPER_MAGIC = 0x9123683E
+	CGROUP_SUPER_MAGIC = 0x27e0eb
+	CIFS_MAGIC_NUMBER = 0xFF534D42
+	CODA_SUPER_MAGIC = 0x73757245
+	COH_SUPER_MAGIC = 0x012FF7B7
+	CRAMFS_MAGIC = 0x28cd3d45
+	DEBUGFS_MAGIC = 0x64626720
+	DEVFS_SUPER_MAGIC = 0x1373
+	DEVPTS_SUPER_MAGIC = 0x1cd1
+	EFIVARFS_MAGIC = 0xde5e81e4
+	EFS_SUPER_MAGIC = 0x00414A53
+	EXT_SUPER_MAGIC = 0x137D
+	EXT2_OLD_SUPER_MAGIC = 0xEF51
+	EXT2_SUPER_MAGIC = 0xEF53
+	EXT3_SUPER_MAGIC = 0xEF53
+	EXT4_SUPER_MAGIC = 0xEF53
+	FUSE_SUPER_MAGIC = 0x65735546
+	FUTEXFS_SUPER_MAGIC = 0xBAD1DEA
+	HFS_SUPER_MAGIC = 0x4244
+	HOSTFS_SUPER_MAGIC = 0x00c0ffee
+	HPFS_SUPER_MAGIC = 0xF995E849
+	HUGETLBFS_MAGIC = 0x958458f6
+	ISOFS_SUPER_MAGIC = 0x9660
+	JFFS2_SUPER_MAGIC = 0x72b6
+	JFS_SUPER_MAGIC = 0x3153464a
+	MINIX_SUPER_MAGIC = 0x137F /* orig. minix */
+	MINIX_SUPER_MAGIC2 = 0x138F /* 30 char minix */
+	MINIX2_SUPER_MAGIC = 0x2468 /* minix V2 */
+	MINIX2_SUPER_MAGIC2 = 0x2478 /* minix V2, 30 char names */
+	MINIX3_SUPER_MAGIC = 0x4d5a /* minix V3 fs, 60 char names */
+	MQUEUE_MAGIC = 0x19800202
+	MSDOS_SUPER_MAGIC = 0x4d44
+	NCP_SUPER_MAGIC = 0x564c
+	NFS_SUPER_MAGIC = 0x6969
+	NILFS_SUPER_MAGIC = 0x3434
+	NTFS_SB_MAGIC = 0x5346544e
+	OCFS2_SUPER_MAGIC = 0x7461636f
+	OPENPROM_SUPER_MAGIC = 0x9fa1
+	PIPEFS_MAGIC = 0x50495045
+	PROC_SUPER_MAGIC = 0x9fa0
+	PSTOREFS_MAGIC = 0x6165676C
+	QNX4_SUPER_MAGIC = 0x002f
+	QNX6_SUPER_MAGIC = 0x68191122
+	RAMFS_MAGIC = 0x858458f6
+	REISERFS_SUPER_MAGIC = 0x52654973
+	ROMFS_MAGIC = 0x7275
+	SELINUX_MAGIC = 0xf97cff8c
+	SMACK_MAGIC = 0x43415d53
+	SMB_SUPER_MAGIC = 0x517B
+	SOCKFS_MAGIC = 0x534F434B
+	SQUASHFS_MAGIC = 0x73717368
+	SYSFS_MAGIC = 0x62656572
+	SYSV2_SUPER_MAGIC = 0x012FF7B6
+	SYSV4_SUPER_MAGIC = 0x012FF7B5
+	TMPFS_MAGIC = 0x01021994
+	UDF_SUPER_MAGIC = 0x15013346
+	UFS_MAGIC = 0x00011954
+	USBDEVICE_SUPER_MAGIC = 0x9fa2
+	V9FS_MAGIC = 0x01021997
+	VXFS_SUPER_MAGIC = 0xa501FCF5
+	XENFS_SUPER_MAGIC = 0xabba1974
+	XENIX_SUPER_MAGIC = 0x012FF7B4
+	XFS_SUPER_MAGIC = 0x58465342
+	_XIAFS_SUPER_MAGIC = 0x012FD16D
+)
+
+var fsLookup = map[int64]string{
+	ADFS_SUPER_MAGIC     :"ADFS_SUPER_MAGIC    ",
+	AFFS_SUPER_MAGIC     :"AFFS_SUPER_MAGIC    ",
+	BDEVFS_MAGIC         :"BDEVFS_MAGIC        ",
+	BEFS_SUPER_MAGIC     :"BEFS_SUPER_MAGIC    ",
+	BFS_MAGIC            :"BFS_MAGIC           ",
+	BINFMTFS_MAGIC       :"BINFMTFS_MAGIC      ",
+	BTRFS_SUPER_MAGIC    :"BTRFS_SUPER_MAGIC   ",
+	CGROUP_SUPER_MAGIC   :"CGROUP_SUPER_MAGIC  ",
+	CIFS_MAGIC_NUMBER    :"CIFS_MAGIC_NUMBER   ",
+	CODA_SUPER_MAGIC     :"CODA_SUPER_MAGIC    ",
+	COH_SUPER_MAGIC      :"COH_SUPER_MAGIC     ",
+	CRAMFS_MAGIC         :"CRAMFS_MAGIC        ",
+	DEBUGFS_MAGIC        :"DEBUGFS_MAGIC       ",
+	DEVFS_SUPER_MAGIC    :"DEVFS_SUPER_MAGIC   ",
+	DEVPTS_SUPER_MAGIC   :"DEVPTS_SUPER_MAGIC  ",
+	EFIVARFS_MAGIC       :"EFIVARFS_MAGIC      ",
+	EFS_SUPER_MAGIC      :"EFS_SUPER_MAGIC     ",
+	EXT_SUPER_MAGIC      :"EXT_SUPER_MAGIC     ",
+	EXT2_OLD_SUPER_MAGIC :"EXT2_OLD_SUPER_MAGIC",
+	EXT4_SUPER_MAGIC     :"EXT4_SUPER_MAGIC    ",
+	FUSE_SUPER_MAGIC     :"FUSE_SUPER_MAGIC    ",
+	FUTEXFS_SUPER_MAGIC  :"FUTEXFS_SUPER_MAGIC ",
+	HFS_SUPER_MAGIC      :"HFS_SUPER_MAGIC     ",
+	HOSTFS_SUPER_MAGIC   :"HOSTFS_SUPER_MAGIC  ",
+	HPFS_SUPER_MAGIC     :"HPFS_SUPER_MAGIC    ",
+	HUGETLBFS_MAGIC      :"HUGETLBFS_MAGIC     ",
+	ISOFS_SUPER_MAGIC    :"ISOFS_SUPER_MAGIC   ",
+	JFFS2_SUPER_MAGIC    :"JFFS2_SUPER_MAGIC   ",
+	JFS_SUPER_MAGIC      :"JFS_SUPER_MAGIC     ",
+	MINIX_SUPER_MAGIC    :"MINIX_SUPER_MAGIC   ",
+	MINIX_SUPER_MAGIC2   :"MINIX_SUPER_MAGIC2  ",
+	MINIX2_SUPER_MAGIC   :"MINIX2_SUPER_MAGIC  ",
+	MINIX2_SUPER_MAGIC2  :"MINIX2_SUPER_MAGIC2 ",
+	MINIX3_SUPER_MAGIC   :"MINIX3_SUPER_MAGIC  ",
+	MQUEUE_MAGIC         :"MQUEUE_MAGIC        ",
+	MSDOS_SUPER_MAGIC    :"MSDOS_SUPER_MAGIC   ",
+	NCP_SUPER_MAGIC      :"NCP_SUPER_MAGIC     ",
+	NFS_SUPER_MAGIC      :"NFS_SUPER_MAGIC     ",
+	NILFS_SUPER_MAGIC    :"NILFS_SUPER_MAGIC   ",
+	NTFS_SB_MAGIC        :"NTFS_SB_MAGIC       ",
+	OCFS2_SUPER_MAGIC    :"OCFS2_SUPER_MAGIC   ",
+	OPENPROM_SUPER_MAGIC :"OPENPROM_SUPER_MAGIC",
+	PIPEFS_MAGIC         :"PIPEFS_MAGIC        ",
+	PROC_SUPER_MAGIC     :"PROC_SUPER_MAGIC    ",
+	PSTOREFS_MAGIC       :"PSTOREFS_MAGIC      ",
+	QNX4_SUPER_MAGIC     :"QNX4_SUPER_MAGIC    ",
+	QNX6_SUPER_MAGIC     :"QNX6_SUPER_MAGIC    ",
+	RAMFS_MAGIC          :"RAMFS_MAGIC         ",
+	REISERFS_SUPER_MAGIC :"REISERFS_SUPER_MAGIC",
+	ROMFS_MAGIC          :"ROMFS_MAGIC         ",
+	SELINUX_MAGIC        :"SELINUX_MAGIC       ",
+	SMACK_MAGIC          :"SMACK_MAGIC         ",
+	SMB_SUPER_MAGIC      :"SMB_SUPER_MAGIC     ",
+	SOCKFS_MAGIC         :"SOCKFS_MAGIC        ",
+	SQUASHFS_MAGIC       :"SQUASHFS_MAGIC      ",
+	SYSFS_MAGIC          :"SYSFS_MAGIC         ",
+	SYSV2_SUPER_MAGIC    :"SYSV2_SUPER_MAGIC   ",
+	SYSV4_SUPER_MAGIC    :"SYSV4_SUPER_MAGIC   ",
+	TMPFS_MAGIC          :"TMPFS_MAGIC         ",
+	UDF_SUPER_MAGIC      :"UDF_SUPER_MAGIC     ",
+	UFS_MAGIC            :"UFS_MAGIC           ",
+	USBDEVICE_SUPER_MAGIC:"USBDEVICE_SUPER_MAGI",
+	V9FS_MAGIC           :"V9FS_MAGIC          ",
+	VXFS_SUPER_MAGIC     :"VXFS_SUPER_MAGIC    ",
+	XENFS_SUPER_MAGIC    :"XENFS_SUPER_MAGIC   ",
+	XENIX_SUPER_MAGIC    :"XENIX_SUPER_MAGIC   ",
+	XFS_SUPER_MAGIC      :"XFS_SUPER_MAGIC     ",
+	_XIAFS_SUPER_MAGIC   :"_XIAFS_SUPER_MAGIC  ",
+}
