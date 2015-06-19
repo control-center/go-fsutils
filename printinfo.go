@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/control-center/go-disk-info/diskinfo"
+	"github.com/control-center/go-fsutils/diskinfo"
+	"github.com/control-center/go-fsutils/btrfs"
 	"fmt"
 	"os"
 )
@@ -23,4 +24,7 @@ func main() {
 	fmt.Println("Size:", usage.Size()/(KB*KB))
 	fmt.Println("Used:", usage.Used()/(KB*KB))
 	fmt.Println("Usage:", usage.Usage())
+
+	btrfs.GetFileSystem(os.Args[1])
+
 }
