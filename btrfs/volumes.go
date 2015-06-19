@@ -150,7 +150,8 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 				}
 			}
 		default:
-			if len(fields) != 0 && fields[0] != "devid" {
+			if len(fields) == 0 {continue}
+			if fields[0] != "devid" {
 				return nil, fmt.Errorf("expected btrfs device content, got: %v", line)
 			}
 			if len(fields) != 8 {
