@@ -135,7 +135,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 				version = fields[1]
 			}
 		case 1:
-			if fields[0] != "Total devices" {
+			if fields[0] != "Total" && fields[1] != "devices" {
 				return nil, fmt.Errorf("Expected Total Device content, got: %v", line)
 			} else {
 				if len(fields) != 7 {
