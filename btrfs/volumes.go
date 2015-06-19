@@ -3,12 +3,12 @@ package btrfs
 import (
 	"bufio"
 	"fmt"
+	"github.com/dustin/go-humanize"
 	"io"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
-	"github.com/dustin/go-humanize"
-	"strconv"
 )
 
 type FileSystem struct {
@@ -93,7 +93,7 @@ func readFileSystem(path string) (*FileSystem, error) {
 }
 
 func parseFSShow(lines []string) (*FileSystem, error) {
-	if len(lines) <2 {
+	if len(lines) < 2 {
 		return nil, fmt.Errorf("unexpected output, check permissions: %v", strings.Join(lines, "\n"))
 	}
 	fmt.Println("fs show output:")
@@ -102,64 +102,84 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	//		Total devices 2 FS bytes used 14.67GiB
 	//		devid    1 size 40.00GiB used 16.01GiB path /dev/sdc1
 	//		devid    2 size 40.00GiB used 16.01GiB path /dev/sdd1
-	var version, line, label, uuid string
-	line = strings.TrimSpace(lines[0])
-	if !strings.HasPrefix(line, "Label:") {
-		return nil, fmt.Errorf("unexpected output, expected Label: %v", line)
-	}else {
-		split := strings.Fields(line)
-		if len(split) != 4 {
-			return nil, fmt.Errorf("unexpected output length: %v", line)
-		}
-		label = split[1]
-		uuid = split[3]
-	}
-
-	//get last line for version
-	line = strings.TrimSpace(lines[len(lines)-1])
-	if !strings.HasPrefix(line, "Btrfs") {
-		return nil, fmt.Errorf("unexpected output, expected btrfs version: %v", line)
-	}else {
-		split := strings.Fields(line)
-		if len(split) != 2 {
-			return nil, fmt.Errorf("unexpected output: %v", line)
-		}
-		version = split[1]
-	}
-
-
+	//
+	//	Btrfs v3.12
+	var version, label, uuid string
 	var totalDevices, usedBytes uint64
 	var err error
-	line = strings.TrimSpace(lines[1])
-	if !strings.HasPrefix(line, "Total devices") {
-		return nil, fmt.Errorf("unexpected output devices output: %v", line)
-	}else {
-		split := strings.Fields(line)
-		if len(split) != 7 {
-			return nil, fmt.Errorf("unexpected output: %v", line)
-		}
-		if totalDevices, err = strconv.ParseUint(split[2], 10, 64); err !=nil {
-			return nil, err
-		}
-		size := split[6]
-		if usedBytes, err = parseSize(size); err != nil {
-			return nil, err
-		}
+	devices := []Device{}
 
+	lineCount := len(lines)
+	for lineNum, line := range lines {
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		switch lineNum {
+		case 0:
+			if fields[0] != "Label:" {
+				return nil, fmt.Errorf("expected label and uuid, got: %v", line)
+			} else {
+				if len(fields) != 4 {
+					return nil, fmt.Errorf("unexpected fields for FS info: %v", line)
+				}
+				label = fields[1]
+				uuid = fields[3]
+			}
+		case lineCount - 1:
+			//get last line for version
+			if fields[0] != "Btrfs" {
+				return nil, fmt.Errorf("expected btrfs version, got: %v", line)
+			} else {
+				if len(fields) != 2 {
+					return nil, fmt.Errorf("unexpected fields for version output: %v", line)
+				}
+				version = fields[1]
+			}
+		case 1:
+			if fields[0] != "Total devices" {
+				return nil, fmt.Errorf("Expected Total Device content, got: %v", line)
+			} else {
+				if len(fields) != 7 {
+					return nil, fmt.Errorf("unexpected fields for total device line: %v", line)
+				}
+				if totalDevices, err = strconv.ParseUint(fields[2], 10, 64); err != nil {
+					return nil, err
+				}
+				size := fields[6]
+				if usedBytes, err = parseSize(size); err != nil {
+					return nil, err
+				}
+			}
+		default:
+			if len(fields) != 0 && fields[0] != "devid" {
+				return nil, fmt.Errorf("expected btrfs device content, got: %v", line)
+			}
+			if len(fields) != 8 {
+				return nil, fmt.Errorf("unexpected fields for device line: %v", line)
+			}
+
+			var size, used uint64
+			if size, err = parseSize(fields[3]); err != nil {
+				return nil, fmt.Errorf("error parsing device size: %v", err)
+			}
+			if used, err = parseSize(fields[5]); err != nil {
+				return nil, fmt.Errorf("error parsing device used bytes: %v", err)
+			}
+			device := Device{DevID: fields[1], Path: fields[7], Size: size, Used: used}
+			devices = append(devices, device)
+		}
 	}
-
 
 	for _, line := range lines {
 		fmt.Println(line)
 	}
 	fs := FileSystem{Label: label,
-		UUID:uuid,
-		TotalDevices:totalDevices,
-		UsedBytes:usedBytes,
-		Version:version,
-		subvolumes: []Subvolume{},
-		dfData: []DFData{},
-		devices: []Device{}}
+		UUID:         uuid,
+		TotalDevices: totalDevices,
+		UsedBytes:    usedBytes,
+		Version:      version,
+		subvolumes:   []Subvolume{},
+		dfData:       []DFData{},
+		devices:      []Device{}}
 
 	return &fs, nil
 }
@@ -212,7 +232,7 @@ func (fs *FileSystem) Subvolumes() []Subvolume {
 }
 
 type Device struct {
-	DevID uint
+	DevID string
 	Size  uint64
 	Used  uint64
 	Path  string
