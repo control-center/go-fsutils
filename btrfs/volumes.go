@@ -105,11 +105,11 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	var version, line, label, uuid string
 	line = strings.TrimSpace(lines[0])
 	if !strings.HasPrefix(line, "Label:") {
-		return nil, fmt.Errorf("unexpected output, expected Label:%v", line)
+		return nil, fmt.Errorf("unexpected output, expected Label: %v", line)
 	}else {
-		split := strings.Split(line, " ")
+		split := strings.Fields(line)
 		if len(split) != 4 {
-			return nil, fmt.Errorf("unexpected output: %v", line)
+			return nil, fmt.Errorf("unexpected output length: %v", line)
 		}
 		label = split[1]
 		uuid = split[3]
@@ -120,7 +120,7 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	if !strings.HasPrefix(line, "Btrfs:") {
 		return nil, fmt.Errorf("unexpected output, expected btrfs version: %v", line)
 	}else {
-		split := strings.Split(line, " ")
+		split := strings.Fields(line)
 		if len(split) != 2 {
 			return nil, fmt.Errorf("unexpected output: %v", line)
 		}
@@ -132,9 +132,9 @@ func parseFSShow(lines []string) (*FileSystem, error) {
 	var err error
 	line = strings.TrimSpace(lines[1])
 	if !strings.HasPrefix(line, "Total devices") {
-		return nil, fmt.Errorf("unexpected output: %v", line)
+		return nil, fmt.Errorf("unexpected output devices output: %v", line)
 	}else {
-		split := strings.Split(line, " ")
+		split := strings.Fields(line)
 		if len(split) != 7 {
 			return nil, fmt.Errorf("unexpected output: %v", line)
 		}
