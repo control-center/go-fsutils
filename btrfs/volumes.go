@@ -7,13 +7,16 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"github.com/dustin/go-humanize"
+	"strconv"
 )
 
 type FileSystem struct {
 	Label        string
 	UUID         string
-	TotalDevices uint
+	TotalDevices uint64
 	UsedBytes    uint64
+	Version      string
 	devices      []Device
 	subvolumes   []Subvolume
 	dfData       []DFData
@@ -90,13 +93,79 @@ func readFileSystem(path string) (*FileSystem, error) {
 }
 
 func parseFSShow(lines []string) (*FileSystem, error) {
+	if len(lines) <2 {
+		return nil, fmt.Errorf("unexpected output, check permissions: %v", strings.Join(lines, "\n"))
+	}
 	fmt.Println("fs show output:")
+	//Should be of format:
+	//	Label: none  uuid: b7c23711-6b9e-46a8-b451-4b3f79c7bc46
+	//		Total devices 2 FS bytes used 14.67GiB
+	//		devid    1 size 40.00GiB used 16.01GiB path /dev/sdc1
+	//		devid    2 size 40.00GiB used 16.01GiB path /dev/sdd1
+	var version, line, label, uuid string
+	line = lines[0]
+	if !strings.HasPrefix("Label:", line) {
+		return nil, fmt.Errorf("unexpected output, expected label: %v", line)
+	}else {
+		split := strings.Split(line, " ")
+		if len(split) != 4 {
+			return nil, fmt.Errorf("unexpected output: %v", line)
+		}
+		label = split[1]
+		uuid = split[3]
+	}
+
+	//get last line for version
+	line = lines[len(lines)-1]
+	if !strings.HasPrefix("Btrfs:", line) {
+		return nil, fmt.Errorf("unexpected output, expected btrfs version: %v", line)
+	}else {
+		split := strings.Split(line, " ")
+		if len(split) != 2 {
+			return nil, fmt.Errorf("unexpected output: %v", line)
+		}
+		version = split[1]
+	}
+
+
+	var totalDevices, usedBytes uint64
+	var err error
+	line = lines[1]
+	if !strings.HasPrefix("Total devices", line) {
+		return nil, fmt.Errorf("unexpected output: %v", line)
+	}else {
+		split := strings.Split(line, " ")
+		if len(split) != 7 {
+			return nil, fmt.Errorf("unexpected output: %v", line)
+		}
+		if totalDevices, err = strconv.ParseUint(split[2], 10, 64); err !=nil{
+			return nil, err
+		}
+		size := split[6]
+		if usedBytes, err = parseSize(size); err != nil {
+			return nil, err
+		}
+
+	}
+
+
 	for _, line := range lines {
 		fmt.Println(line)
 	}
-	fs := FileSystem{subvolumes: []Subvolume{}, dfData: []DFData{}, devices: []Device{}}
+	fs := FileSystem{Label: label,
+		UUID:uuid,
+		TotalDevices:totalDevices,
+		UsedBytes:usedBytes,
+		Version:version,
+		subvolumes: []Subvolume{},
+		dfData: []DFData{},
+		devices: []Device{}}
 
 	return &fs, nil
+}
+
+func parseSize(size string) (uint64, error) {
+	return humanize.ParseBytes(size)
 }
 
 func (fs *FileSystem) TotalBytes() uint64 {
