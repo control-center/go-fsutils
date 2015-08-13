@@ -45,15 +45,14 @@ func GetFileSystem(path string) (*FileSystem, error) {
 	}
 
 	//btrfs fi df <path>, parse info into structs
-	cmd := exec.Command("btrfs", "fi", "df", path)
-	dfOut, err := cmd.CombinedOutput()
+	dfData, err := readDfData(path)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(dfOut[:]))
+	fs.dfData = dfData
 
 	//also btrfs subvolume list
-	cmd = exec.Command("btrfs", "subvolume", "list", path)
+	cmd := exec.Command("btrfs", "subvolume", "list", path)
 	svListOut, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, err
@@ -62,6 +61,219 @@ func GetFileSystem(path string) (*FileSystem, error) {
 
 	return fs, nil
 }
+
+func readSubvolumes(path string) ([]Subvolume, error) {
+	cmd := exec.Command("btrfs", "subvolume", "list", path)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	err = cmd.Start()
+	svLines, err := readLines(stdout)
+	if err != nil {
+		return nil, err
+	}
+	errLines, err := readLines(stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(errLines) != 0 {
+		return nil, fmt.Errorf("Error reading btrfs fi df %v: %v", path, errLines)
+	}
+
+	return parseSubvolumes(path, svLines)
+
+
+}
+
+func readDfData(path string) ([]DFData, error) {
+	cmd := exec.Command("btrfs", "fi", "df", path)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	err = cmd.Start()
+	dfLines, err := readLines(stdout)
+	if err != nil {
+		return nil, err
+	}
+	errLines, err := readLines(stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(errLines) != 0 {
+		return nil, fmt.Errorf("Error reading btrfs fi df %v: %v", path, errLines)
+	}
+
+	return parseDF(dfLines)
+}
+
+func parseSubvolumes(path string, lines []string) ([]Subvolume, error) {
+	/*
+		ID 409 gen 527 top level 5 path btrfs/subvolumes/511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158
+		ID 410 gen 247 top level 5 path btrfs/subvolumes/f3c84ac3a0533f691c9fea4cc2ceaaf43baec22bf8d6a479e069f6d814be9b86
+		ID 411 gen 248 top level 5 path btrfs/subvolumes/a1a958a248181c9aa6413848cd67646e5afb9797f1a3da5995c7a636f050f537
+	*/
+	sv := []Subvolume{}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		if len(fields)!=9 {
+			return []Subvolume{}, fmt.Errorf("unexpected output in line: %v", line)
+		}
+		svpath := fields[8]
+
+		subvolume, err := readSubvolume(path, svpath)
+		if err != nil {
+			return []Subvolume{}, err
+		}
+		sv = append(sv, subvolume)
+	}
+	return sv, nil
+}
+func readSubvolume(rootPath, subvolumePath string) (*Subvolume, error) {
+	svPath := fmt.Sprintf("%v/%v", rootPath, subvolumePath)
+	cmd := exec.Command("btrfs", "subvolume", "show", svPath)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
+
+	err = cmd.Start()
+	svLines, err := readLines(stdout)
+	if err != nil {
+		return nil, err
+	}
+	errLines, err := readLines(stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(errLines) != 0 {
+		return nil, fmt.Errorf("Error reading btrfs subvolume show %v: %v", svPath, errLines)
+	}
+	/*
+		Name: 			3982a0c9a57865b4614aa375a547648e488afc58a99caafce4448f8a51a7a2eb
+		uuid: 			e9aaa9f0-fb11-3547-816f-13ca00ce0a55
+		Parent uuid: 		54902924-ffb5-d744-8a09-aa716d711a92
+		Creation time: 		2015-06-17 10:31:09
+		Object ID: 		968
+		Generation (Gen): 	37364
+		Gen at creation: 	3065
+		Parent: 		5
+		Top Level: 		5
+		Flags: 			-
+		Snapshot(s):
+	 */
+	sv := Subvolume{}
+	for lineNum, line := range svLines {
+		if lineNum == 0 {
+			continue
+		}
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+
+		switch fields[0] {
+		case "Name:":
+			sv.Name = fields[1]
+		case "uuid:":
+			sv.UUID = fields[1]
+		case "Parent":
+			sv.ParentUUID = fields[2]
+		case "Creation":
+			sv.CreationTime , err = time.Parse("2005-01-2 03:04:05", fields[2])
+			if err != nil {return fmt.Errorf("error parsing timestatmp: %v: %v", line, err)}
+		case "Object":
+			sv.ID= fields[2]
+		case "Generation":
+			sv.Gen, err = strconv.ParseUint(fields[2], 0, 32)
+			if err != nil {return fmt.Errorf("error parsing timestatmp: %v: %v", line, err)}
+		case "Gen":
+			sv.GenAtCreation, err  = strconv.ParseUint(fields[3], 0, 32)
+			if err != nil {return fmt.Errorf("error parsing Generation: %v: %v", line, err)}
+		case "Parent:":
+			sv.Parent, err  = strconv.ParseUint(fields[1], 0, 32)
+			if err != nil {return fmt.Errorf("error parsing Parent: %v: %v", line, err)}
+		case "Top":
+			sv.TopLevel, err  = strconv.ParseUint(fields[2], 0, 32)
+			if err != nil {return fmt.Errorf("error parsing Top: %v: %v", line, err)}
+
+		case "Flags:":
+			continue
+		case "Snapshot(s):":
+			continue
+		}
+	}
+	return sv, nil
+}
+
+
+func parseDF(lines []string) ([]DFData, error) {
+	//output format:
+	/*
+		Data, single: total=9.00GiB, used=8.67GiB
+		System, DUP: total=32.00MiB, used=16.00KiB
+		Metadata, DUP: total=1.00GiB, used=466.88MiB
+	*/
+
+
+	if len(lines) < 3 {
+		return []DFData{}, fmt.Errorf("insufficient output: %v", strings.Join(lines, "/n"))
+	}
+	df := []DFData{}
+	var err error
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		switch fields[0] {
+		case "Data", "System", "Metadata", "GlobalReserve":
+			if len(fields) != 4 {
+				return []DFData{}, fmt.Errorf("Unknown fields: %v", line)
+			}
+			total := fields[2]
+			var totalBytes, usedBytes uint64
+			if strings.HasPrefix(total, "total=") {
+				total = strings.SplitAfter(total, "=")
+				if totalBytes, err = parseSize(total); err != nil {
+					return []DFData{}, err
+				}
+			}else {
+				return []DFData{}, fmt.Errorf("expected total field: %v", line)
+			}
+			used := fields[3]
+			if strings.HasPrefix(used, "used=") {
+				used = strings.SplitAfter(used, "=")
+				if usedBytes, err = parseSize(used); err != nil {
+					return []DFData{}, err
+				}
+			}else {
+				return []DFData{}, fmt.Errorf("expected used field: %v", line)
+			}
+
+			df = append(df, DFData{{DataType:fields[0], Level:[1], Total:totalBytes, Used: usedBytes}})
+		default:
+			return []DFData{}, fmt.Errorf("Unknown fields: %v", line)
+		}
+	}
+	return df, nil
+}
+
 
 func readFileSystem(path string) (*FileSystem, error) {
 	//do a btrfs fi show <path>
@@ -86,7 +298,7 @@ func readFileSystem(path string) (*FileSystem, error) {
 	}
 
 	if len(errLines) != 0 {
-		return nil, fmt.Errorf("Error reading btrfs fi show: %v", errLines)
+		return nil, fmt.Errorf("Error reading btrfs fi show %v: %v", path, errLines)
 	}
 
 	return parseFSShow(showLines)
