@@ -25,6 +25,12 @@ func main() {
 	fmt.Println("Used:", usage.Used()/(KB*KB))
 	fmt.Println("Usage:", usage.Usage())
 
-	btrfs.GetFileSystem(os.Args[1])
+	fs, err := btrfs.GetFileSystem(os.Args[1])
+
+	if err !=nil{
+	   fmt.Println(err)
+	   return
+	}
+	fmt.Printf("Btrfs: %+v\n", *fs)
 
 }
